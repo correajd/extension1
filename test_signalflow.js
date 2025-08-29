@@ -1,6 +1,9 @@
 import signalflow from 'k6/x/signalflow';
 
 export default async function () {
+    const realm = __ENV.O11Y_REALM || CONFIG.DEFAULT_REALM;
+    const token = __ENV.O11Y_TOKEN;
+
     const program = "data('demo.trans.latency').publish()";
     const now = Date.now();
     const oneHourAgo = now - (60 * 30 * 1000);
@@ -11,7 +14,7 @@ export default async function () {
     
     try {
         console.log('Creating SignalFlow client...');
-        signalFlow = signalflow.newSignalFlow('Dj-KsDFzjcOhhEwpe1t6jg', 'rc0');
+        signalFlow = signalflow.newSignalFlow(token, realm);
         
         console.log(`Executing SignalFlow program from ${new Date(oneHourAgo).toISOString()} to ${new Date(now).toISOString()}`);
         console.log(`Program: ${program}`);
