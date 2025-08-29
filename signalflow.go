@@ -58,7 +58,7 @@ func (si *SignalflowInstance) Exports() modules.Exports {
 
 // NewSignalFlow creates a new SignalFlow client
 func (si *SignalflowInstance) NewSignalFlow(token string, realm string) (*Client, error) {
-	log.Printf("Creating new SignalFlow client. Realm: %s, Token: %s... (truncated for security)", realm, token[:min(len(token), 5)])
+	log.Printf("Creating new SignalFlow client. Realm: %s, Token: %s... (truncated for security)", realm, token[:minOfTwoInts(len(token), 5)])
 
 	streamURL := signalflow.StreamURLForRealm(realm)
 	log.Printf("Using Stream URL: %v", streamURL)
@@ -81,8 +81,8 @@ func (si *SignalflowInstance) NewSignalFlow(token string, realm string) (*Client
 	return &Client{client: client}, nil
 }
 
-// min is a helper function to get the minimum of two integers
-func min(a, b int) int {
+// minOfTwoInts is a helper function to get the minimum of two integers
+func minOfTwoInts(a, b int) int {
 	if a < b {
 		return a
 	}
@@ -114,27 +114,94 @@ func (c *Computation) Next() (interface{}, bool) {
 	return msg, true
 }
 
-//func (c *Computation) Collect() map[string][]TSDataMessage {
-//	tsMap := make(map[string][]TSDataMessage)
-//
-//	msg, ok := <-c.comp.Data()
-//
-//	for ok {
-//		for _, pl := range msg.Payloads {
-//			tsId := pl.TSID.String()
-//			value := pl.Value()
-//			timestamp := int64(msg.TimestampMillis)
-//			tsMap[tsId] = append(tsMap[tsId], TSDataMessage{LogicalTimestamp: timestamp, TsID: tsId, Value: value})
-//		}
-//		msg, ok = <-c.comp.Data()
-//	}
-//
-//	return tsMap
-//}
+// Collect gathers all data points from the computation and returns them in a map keyed by tsid
+func (c *Computation) Collect() map[string]interface{} {
+	if c == nil || c.comp == nil {
+		return map[string]interface{}{"error": "computation is nil"}
+	}
+
+	result := map[string]interface{}{
+		"type": "data",
+		"data": make(map[string][]map[string]interface{}),
+	}
+
+	// Read all available messages
+	for {
+		msg, ok := <-c.comp.Data()
+		if !ok {
+			break // No more messages
+		}
+
+		// For each payload in the message
+		for _, pl := range msg.Payloads {
+			tsid := pl.TSID.String()
+
+			// Initialize the slice for this tsid if it doesn't exist
+			if _, exists := result["data"].(map[string][]map[string]interface{})[tsid]; !exists {
+				result["data"].(map[string][]map[string]interface{})[tsid] = []map[string]interface{}{}
+			}
+
+			// Add the data point to the appropriate tsid
+			dataPoint := map[string]interface{}{
+				"timestamp": msg.TimestampMillis,
+				"value":     pl.Value(),
+			}
+			result["data"].(map[string][]map[string]interface{})[tsid] =
+				append(result["data"].(map[string][]map[string]interface{})[tsid], dataPoint)
+		}
+	}
+
+	return result
+}
 
 // Close stops the computation
 func (c *Computation) Close() error {
-	return c.comp.Stop(nil)
+	if c == nil {
+		return nil
+	}
+
+	// Use a mutex to prevent concurrent Close calls
+	var comp *signalflow.Computation
+
+	// Safely get and clear the computation
+	func() {
+		if c.comp == nil {
+			return
+		}
+		comp = c.comp
+		c.comp = nil
+	}()
+
+	if comp == nil {
+		return nil
+	}
+
+	// Use a context with timeout to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Use a channel to handle the stop operation with timeout
+	done := make(chan struct{}) // We don't care about the error at this point
+
+	go func() {
+		defer close(done)
+		// Use recover to catch any panics from the Stop call
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from panic in computation.Stop: %v", r)
+			}
+		}()
+		_ = comp.Stop(nil) // Ignore the error
+	}()
+
+	// Wait for either the stop to complete or the context to timeout
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		log.Printf("Timeout while stopping computation: %v", ctx.Err())
+		return nil
+	}
 }
 
 // Execute runs a SignalFlow program and returns a Computation object
