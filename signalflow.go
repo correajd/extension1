@@ -55,7 +55,7 @@ func (si *SignalflowInstance) NewSignalFlow(token string, realm string) (*Client
 	log.Printf("Creating new SignalFlow client. Realm: %s, Token: %s... (truncated for security)", realm, token[:min(len(token), 5)])
 
 	streamURL := signalflow.StreamURLForRealm(realm)
-	log.Printf("Using Stream URL: %s", streamURL)
+	log.Printf("Using Stream URL: %v", streamURL)
 
 	client, err := signalflow.NewClient(
 		streamURL,
@@ -66,9 +66,9 @@ func (si *SignalflowInstance) NewSignalFlow(token string, realm string) (*Client
 	)
 
 	if err != nil {
-		errMsg := fmt.Sprintf("Failed to create SignalFlow client: %v", err)
-		log.Printf(errMsg)
-		return nil, fmt.Errorf(errMsg)
+		errMsg := "Failed to create SignalFlow client: " + err.Error()
+		log.Print(errMsg)
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	log.Printf("Successfully created SignalFlow client for realm: %s", realm)
@@ -120,8 +120,8 @@ func (c *Client) Execute(program string, start, stop int64, resolution int) (*Co
 
 	if c.client == nil {
 		errMsg := "SignalFlow client is not initialized"
-		log.Printf(errMsg)
-		return nil, fmt.Errorf(errMsg)
+		log.Print(errMsg)
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	// Create a context with timeout
@@ -149,9 +149,9 @@ func (c *Client) Execute(program string, start, stop int64, resolution int) (*Co
 	})
 
 	if err != nil {
-		errMsg := fmt.Sprintf("Failed to execute SignalFlow program: %v", err)
-		log.Printf(errMsg)
-		return nil, fmt.Errorf(errMsg)
+		errMsg := "Failed to execute SignalFlow program: " + err.Error()
+		log.Print(errMsg)
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	log.Printf("Successfully started SignalFlow execution")
