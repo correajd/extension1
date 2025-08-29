@@ -34,6 +34,12 @@ type (
 	Computation struct {
 		comp *signalflow.Computation
 	}
+
+	TSDataMessage struct {
+		LogicalTimestamp int64
+		TsID             string
+		Value            interface{}
+	}
 )
 
 // NewModuleInstance implements the modules.Module interface and returns
@@ -108,6 +114,24 @@ func (c *Computation) Next() (interface{}, bool) {
 	return msg, true
 }
 
+//func (c *Computation) Collect() map[string][]TSDataMessage {
+//	tsMap := make(map[string][]TSDataMessage)
+//
+//	msg, ok := <-c.comp.Data()
+//
+//	for ok {
+//		for _, pl := range msg.Payloads {
+//			tsId := pl.TSID.String()
+//			value := pl.Value()
+//			timestamp := int64(msg.TimestampMillis)
+//			tsMap[tsId] = append(tsMap[tsId], TSDataMessage{LogicalTimestamp: timestamp, TsID: tsId, Value: value})
+//		}
+//		msg, ok = <-c.comp.Data()
+//	}
+//
+//	return tsMap
+//}
+
 // Close stops the computation
 func (c *Computation) Close() error {
 	return c.comp.Stop(nil)
@@ -150,6 +174,12 @@ func (c *Client) Execute(program string, start, stop int64, resolution int) (*Co
 
 	if err != nil {
 		errMsg := "Failed to execute SignalFlow program: " + err.Error()
+		log.Print(errMsg)
+		return nil, fmt.Errorf("%s", errMsg)
+	}
+
+	if comp == nil {
+		errMsg := "Received nil computation from SignalFlow client"
 		log.Print(errMsg)
 		return nil, fmt.Errorf("%s", errMsg)
 	}
